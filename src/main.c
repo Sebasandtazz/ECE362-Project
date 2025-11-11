@@ -15,7 +15,8 @@
 #include "hardware/spi.h"
 #include "hardware/uart.h"
 #include "pico/rand.h"
-
+/*Hardware mtk3339 Headers*/
+#include "gpsdata.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
