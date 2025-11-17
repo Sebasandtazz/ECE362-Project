@@ -17,7 +17,7 @@
 #include "pico/rand.h"
 /*Hardware mtk3339 Headers*/
 //#include "gpsdata.h"
-
+#include "gps.h"
 //////////////////////////////////////////////////////////////////////////////
 
 /*Init of all of the pins used */
@@ -51,9 +51,12 @@ uint32_t last_set_time = 0;
 
 void timer_isr() {
     /*Setting up timer leaving my code here for reference*/
-    timer0_hw->intr = 1u << 0;
+    timer0_hw->intr = 1u << 1;
     last_set_time = timer0_hw->timerawl;
-    #fill in the code here to send ALL startup functions to the GPS
+    gps_periodic_irq();
+    timer0_hw->alarm[0] = timer0_hw->timerawl + 25000;
+
+    // fill in the code here to send ALL startup functions to the GPS
 }
 
 void init_startup_timer() {
@@ -67,8 +70,8 @@ void init_startup_timer() {
 void init_lcd_disp_dma() {
     /*Once again, not exactly the same as this but if all values here are corrected it will work*/
     uint32_t temp = 0;
-    dma_hw->ch[1].read_addr = message;
-    dma_hw->ch[1].write_addr = &spi1_hw->dr;
+    //dma_hw->ch[1].read_addr = &uart0_hw->dr;
+    //dma_hw->ch[1].write_addr = &spi1_hw->dr;
     dma_hw->ch[1].transfer_count = (8 | 0xf << 28);
     temp |= (1u << 2);
     temp |= (1u << 4);
@@ -79,12 +82,16 @@ void init_lcd_disp_dma() {
 }
 
 void init_uart_gps() {
-    uart_init(uart0, 115200);
+    uart_init(uart0, 9600);
     gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(uart0, 0)); // TODO: double check naming of TX and RX PINS
     gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(uart0, 1)); // TODO: double check naming of TX and RX PINS
     uart_set_format(uart0, 8, 1, UART_PARITY_NONE);
+    sleep_ms(1);
 }
 
+void gps_periodic_irq() {
+    uart_read_blocking(uart0,/*buffer name*/ , /*13 + message size*/);
+}
 
 
 //////////////////////////////////////////////////////////////////////////////
