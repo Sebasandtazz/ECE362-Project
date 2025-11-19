@@ -326,7 +326,7 @@ void timer_isr() {
     timer0_hw->intr = 1u << 1;
     last_set_time = timer0_hw->timerawl;
     gps_periodic_irq();
-    timer0_hw->alarm[0] = timer0_hw->timerawl + 25000;
+    timer0_hw->alarm[0] = timer0_hw->timerawl + 2500;
 
     // fill in the code here to send ALL startup functions to the GPS
 }
@@ -377,7 +377,7 @@ void gps_periodic_irq() {
     uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
     buf[sizeof(buf) - 1] = '\0';
     tft_print_multiline(10, 20, buf, 
-                         RGB565(0, 0, 0), RGB565(255, 255, 0), line_height);
+                         RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
     printf("%s",buf);
 
 }
@@ -396,7 +396,7 @@ int main()
     init_disp();
     tft_init();
 
-    tft_fill_screen(RGB565(255, 255, 255));
+    tft_fill_screen(RGB565(255, 0, 0));
 
 
     for(;;);
