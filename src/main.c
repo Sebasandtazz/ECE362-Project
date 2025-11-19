@@ -16,6 +16,7 @@
 #include "hardware/uart.h"
 #include "pico/rand.h"
 #include "font.h"
+#include "pico/time.h"
 /*Hardware mtk3339 Headers*/
 //#include "gpsdata.h"
 //////////////////////////////////////////////////////////////////////////////
@@ -46,6 +47,19 @@ typedef struct {
 } gps_data;
 
 
+// LCD Page Selection
+typedef enum{
+    PAGE_SPEED = 0,
+    PAGE_LOCATION = 1,
+    PAGE_TIME = 2
+} page_t;
+
+// Current LCD Page
+volatile page_t current_page = PAGE_SPEED;
+
+// Debounce for buttons
+#define BUTTON_DEBOUNCE_US 150000
+volatile uint64_t last_button_time_us = 0;
 
 /*Prevent Implicit Declarations*/
 void gps_periodic_irq();
@@ -310,13 +324,58 @@ void tft_print_multiline(uint16_t start_x, uint16_t start_y, const char* str,
     }
 }
 
-void page_sel_isr() {
-   /*Set up code + global to change page state with different variables displayed*/
-    
+// Helper to get a label for the current page 
+const char* get_page_label(void) {
+    switch (current_page) {
+        case PAGE_SPEED:    return "Speed Screen";
+        case PAGE_LOCATION: return "Location Screen";
+        case PAGE_TIME:     return "Time Screen";
+        default:            return "Unknown";
+    }
 }
 
+void page_sel_isr(uint gpio, uint32_t events) {
+   /*Set up code + global to change page state with different variables displayed*/
+    uint64_t now = time_us_64();
+    if (now - last_button_time_us < BUTTON_DEBOUNCE_US) {
+        return; // debounce
+    }
+    last_button_time_us = now;
+
+    if (gpio == (uint)button_1) {
+        // Next page: SPEED -> LOCATION -> TIME -> SPEED
+        current_page = (current_page + 1) % 3;
+    } else if (gpio == (uint)button_2) {
+        // Previous page
+        current_page = (current_page + 3 - 1) % 3;
+    }
+}
+
+// Init all GPIO pins for page selection buttons 
 void page_sel_irq() {
     /*Init all gpio pins for page_sel and led*/
+    // Button 1
+    gpio_init(button_1);
+    gpio_set_dir(button_1, GPIO_IN);
+    gpio_pull_up(button_1);
+
+    // Button 2
+    gpio_init(button_2);
+    gpio_set_dir(button_2, GPIO_IN);
+    gpio_pull_up(button_2);
+
+    // Register IRQ callback for button_1, and enable for both
+    gpio_set_irq_enabled_with_callback(
+        button_1,
+        GPIO_IRQ_EDGE_FALL,
+        true,
+        &page_sel_isr
+    );
+    gpio_set_irq_enabled(
+        button_2,
+        GPIO_IRQ_EDGE_FALL,
+        true
+    );
 }
 
 uint32_t last_set_time = 0;
@@ -395,6 +454,7 @@ int main()
     init_spi();
     init_disp();
     tft_init();
+    page_sel_irq();
 
     tft_fill_screen(RGB565(255, 0, 0));
 
