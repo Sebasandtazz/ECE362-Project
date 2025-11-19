@@ -17,16 +17,20 @@
 #include "pico/rand.h"
 /*Hardware mtk3339 Headers*/
 //#include "gpsdata.h"
-#include "gps.h"
 //////////////////////////////////////////////////////////////////////////////
+#define BUFSIZE 32
+char strbuf[BUFSIZE];
+
+/*Prevent Implicit Declarations*/
+void gps_periodic_irq();
 
 /*Init of all of the pins used */
 const int button_1 = 21;
 const int button_2 = 26; 
 const int led_1 = -1;
 const int led_2 = -1;
-const int UART_TX_PIN = 0;
-const int UART_RX_PIN = 1;
+const int UART_TX_PIN = 8;
+const int UART_RX_PIN = 9;
 
 
 typedef enum {
@@ -70,7 +74,7 @@ void init_startup_timer() {
 void init_lcd_disp_dma() {
     /*Once again, not exactly the same as this but if all values here are corrected it will work*/
     uint32_t temp = 0;
-    //dma_hw->ch[1].read_addr = &uart0_hw->dr;
+    //dma_hw->ch[1].read_addr = &uart1_hw->dr;
     //dma_hw->ch[1].write_addr = &spi1_hw->dr;
     dma_hw->ch[1].transfer_count = (8 | 0xf << 28);
     temp |= (1u << 2);
@@ -82,15 +86,21 @@ void init_lcd_disp_dma() {
 }
 
 void init_uart_gps() {
-    uart_init(uart0, 9600);
-    gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(uart0, 0)); // TODO: double check naming of TX and RX PINS
-    gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(uart0, 1)); // TODO: double check naming of TX and RX PINS
-    uart_set_format(uart0, 8, 1, UART_PARITY_NONE);
+    uart_init(uart1, 9600);
+    gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(uart1, 0)); // TODO: double check naming of TX and RX PINS
+    gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(uart1, 1)); // TODO: double check naming of TX and RX PINS
+    uart_set_format(uart1, 8, 1, UART_PARITY_NONE);
     sleep_ms(1);
+    uart_write_blocking(uart1, (const uint8_t*) "$PMTK104*37\r\n", strlen("$PMTK104*37\r\n"));
+    uart_write_blocking(uart1,(const uint8_t*) "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C\r\n", strlen("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C<CR><LF>"));
 }
 
 void gps_periodic_irq() {
-    uart_read_blocking(uart0,/*buffer name*/ , /*13 + message size*/);
+    char buf[BUFSIZE];
+    uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
+    buf[sizeof(buf) - 1] = '\0';
+    printf("%s",buf);
+
 }
 
 
@@ -100,11 +110,15 @@ void gps_periodic_irq() {
 int main()
 {
     /*Call all inits here*/
+    stdio_init_all();
+    init_uart_gps();
+    init_startup_timer();
 
     for(;;) {
-       /*Put in any recurring things here, although they should be sparse as
-       all active transfers after the intializations should be DMA controlled.
-       This can serve to send status updates or something.*/
+       char buf[BUFSIZE];
+        uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
+        buf[sizeof(buf) - 1] = '\0';
+        printf(buf);
     }
 
     for(;;);
