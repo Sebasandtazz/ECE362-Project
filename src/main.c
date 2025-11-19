@@ -41,6 +41,20 @@ typedef enum {
 } module_state_t;
 module_state_t gps_state = INIT;
 
+typedef struct {
+    uint32_t time;
+    uint8_t date;
+    float_t latitude;
+    char north_south;
+    float_t longitude;
+    char east_west;
+    uint8_t num_sats;
+    uint8_t sat_id;
+    uint8_t sat_elev;
+    uint8_t sat_azimuth;
+    float_t ground_speed;
+    float_t ground_course;
+} gps_data;
 
 void page_sel_isr() {
    /*Set up code + global to change page state with different variables displayed*/
@@ -93,12 +107,22 @@ void init_uart_gps() {
     sleep_ms(1);
     uart_write_blocking(uart1, (const uint8_t*) "$PMTK104*37\r\n", strlen("$PMTK104*37\r\n"));
     uart_write_blocking(uart1,(const uint8_t*) "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C\r\n", strlen("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C<CR><LF>"));
+    /* BITWISE DEFINITION OF OUTPUT 
+    0 NMEA_SEN_GLL, // GPGLL interval - Geographic Position - Latitude longitude
+    1 NMEA_SEN_RMC, // GPRMC interval - Recommended Minimum Specific GNSS Sentence
+    2 NMEA_SEN_VTG, // GPVTG interval - Course over Ground and Ground Speed
+    3 NMEA_SEN_GGA, // GPGGA interval - GPS Fix Data
+    4 NMEA_SEN_GSA, // GPGSA interval - GNSS DOPS and Active Satellites
+    5 NMEA_SEN_GSV, // GPGSV interval - GNSS Satellites in View 
+    EVERYTHING AFTER THIS IS IS RESERVED UNTIL THE LAST BIT
+    */
 }
 
 void gps_periodic_irq() {
     char buf[BUFSIZE];
     uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
     buf[sizeof(buf) - 1] = '\0';
+
     printf("%s",buf);
 
 }
