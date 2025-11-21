@@ -1,5 +1,14 @@
 {
     "files.associations": {
         "gpio.h": "c"
-    }
+    },
+    "idf.espIdfPathWin": "C:\\Users\\sebas\\esp\\v5.5.1\\esp-idf",
+    "idf.toolsPathWin": "C:\\Users\\sebas\\.espressif",
+    "idf.pythonInstallPath": "C:\\Users\\sebas\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+    "idf.flashType": "UART",
+    "idf.portWin": "COM8",
+    "idf.monitorPort": "COM8",
+    "idf.openOcdConfigs": [
+        "board/esp32c6-ftdi.cfg"
+    ]
 }
