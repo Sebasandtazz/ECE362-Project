@@ -339,8 +339,8 @@ void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t c
 }
 
 // Display Speed: [value] mph in a blue box
-// Parameters: x, y = position of top-left corner of the label box, speed_value = speed number to display
-void display_speed(uint16_t x, uint16_t y, float speed_value) {
+// Parameters: x, y = position of top-left corner of the label box, speed_str = speed string to display
+void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t blue_color = RGB565(0, 0, 255);
@@ -351,16 +351,14 @@ void display_speed(uint16_t x, uint16_t y, float speed_value) {
     // Print "Speed:" label in the blue box
     tft_print_string(x + 10, y + 8, "Speed:", RGB565(255, 255, 255), blue_color);
     
-    // Format and print the speed value below the box
-    char speed_buffer[32];
-    snprintf(speed_buffer, sizeof(speed_buffer), "%.1f mph", speed_value);
-    tft_print_string(x + 10, y + label_box_height + 10, speed_buffer, 
+    // Print the speed value below the box
+    tft_print_string(x + 10, y + label_box_height + 10, speed_str, 
                      RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
 // Display Location: [lat, lon] in a red box
-// Parameters: x, y = position of top-left corner of the label box, lat = latitude, lon = longitude
-void display_location(uint16_t x, uint16_t y, float lat, float lon) {
+// Parameters: x, y = position of top-left corner of the label box, lat_str = latitude string, lon_str = longitude string
+void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lon_str) {
     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
@@ -372,14 +370,12 @@ void display_location(uint16_t x, uint16_t y, float lat, float lon) {
     // Print "Location:" label in the red box
     tft_print_string(x + 10, y + 8, "Location:", RGB565(255, 255, 255), red_color);
     
-    // Format and print coordinates below the box
-    char location_buffer[64];
-    snprintf(location_buffer, sizeof(location_buffer), "Lat: %.6f", lat);
-    tft_print_string(x + 10, y + label_box_height + 10, location_buffer, 
+    // Print latitude below the box
+    tft_print_string(x + 10, y + label_box_height + 10, lat_str, 
                      RGB565(0, 0, 0), RGB565(255, 255, 255));
     
-    snprintf(location_buffer, sizeof(location_buffer), "Lon: %.6f", lon);
-    tft_print_string(x + 10, y + label_box_height + 10 + line_height, location_buffer, 
+    // Print longitude below latitude
+    tft_print_string(x + 10, y + label_box_height + 10 + line_height, lon_str, 
                      RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
@@ -401,9 +397,9 @@ void display_time(uint16_t x, uint16_t y, const char* time_str) {
                      RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
-void display_all(float speed_value, float lat, float lon, const char* time_str){
-    display_speed(10, 10, speed_value);
-    display_location(10, 80, lat, lon);
+void display_all(const char* speed_str, const char* lat_str, const char* lon_str, const char* time_str){
+    display_speed(10, 10, speed_str);
+    display_location(10, 80, lat_str, lon_str);
     display_time(10, 180, time_str);
 }
 
