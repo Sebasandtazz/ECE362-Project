@@ -29,7 +29,7 @@
 // const int SPI_TX = 19;
 // const int SPI_RX = 16;
 // const int DISP_DC = 20;
-// const int DISP_RST = 21;
+// const int DISP_RST = 22;
 
 // // screen dimensions 
 // #define TFT_WIDTH   240
@@ -80,24 +80,18 @@
 //     gpio_put(SPI_CSn, 1);  // Deassert chip select
 // }
 
-// // Send a data byte to the display
-// // Sets DC pin high to indicate data mode, then sends the data
-// void send_spi_data(spi_inst_t *spi, uint8_t data) {
-//     gpio_put(DISP_DC, 1);  // Data mode (DC = 1)
-//     gpio_put(SPI_CSn, 0);  // Assert chip select (active low)
-
-//     spi_write_blocking(spi, &data, 1); // Send data byte
-
-//     gpio_put(SPI_CSn, 1);  // Deassert chip select
-// }
-
-// // Send a 16-bit data value to the display (for colors and coordinates)
+// // Send a 16-bit (long) or 8-bit (not long) data value to the display (for colors and coordinates)
 // // Converts 16-bit value to two bytes (MSB first) and sends them
-// void send_spi_data16(spi_inst_t *spi, uint16_t data) {
-//     uint8_t buf[2] = { data >> 8, data & 0xFF };  // Split into MSB and LSB
+// void send_spi_data16(spi_inst_t *spi, uint16_t data, bool is_long) {
 //     gpio_put(DISP_DC, 1);  // Data mode (DC = 1)
 //     gpio_put(SPI_CSn, 0);  // Assert chip select (active low)
-//     spi_write_blocking(spi, buf, 2); // Send both bytes
+//     if(is_long){
+//         uint8_t buf[2] = { data >> 8, data & 0xFF };  // Split into MSB and LSB
+//         spi_write_blocking(spi, buf, 2); // Send both bytes
+//     }
+//     else{
+//         spi_write_blocking(spi, &data, 1); // Send data byte
+//     }
 //     gpio_put(SPI_CSn, 1);  // Deassert chip select
 // }
 
@@ -122,11 +116,11 @@
 
 //     // Pixel format set (0x3A) - configure color depth
 //     send_spi_cmd(spi0, 0x3A);
-//     send_spi_data(spi0, 0x55);  // 0x55 = 16-bit color (RGB565)
+//     send_spi_data16(spi0, 0x55, false);  // 0x55 = 16-bit color (RGB565)
 
 //     // Memory Access Control (0x36) - set orientation and color order
 //     send_spi_cmd(spi0, 0x36);
-//     send_spi_data(spi0, 0x48);  // MX=1 (mirror X), RGB mode (BGR=0)
+//     send_spi_data16(spi0, 0x48, false);  // MX=1 (mirror X), RGB mode (BGR=0)
 
 //     // Display ON (0x29) - turn on the display
 //     send_spi_cmd(spi0, 0x29);
@@ -138,12 +132,12 @@
 // // Parameters: (x0, y0) = top-left corner, (x1, y1) = bottom-right corner
 // void tft_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
 //     send_spi_cmd(spi0, 0x2A); // Column address set command
-//     send_spi_data16(spi0, x0); // Start column
-//     send_spi_data16(spi0, x1); // End column
+//     send_spi_data16(spi0, x0, true); // Start column
+//     send_spi_data16(spi0, x1, true); // End column
 
 //     send_spi_cmd(spi0, 0x2B); // Row address set command
-//     send_spi_data16(spi0, y0); // Start row
-//     send_spi_data16(spi0, y1); // End row
+//     send_spi_data16(spi0, y0, true); // Start row
+//     send_spi_data16(spi0, y1, true); // End row
 
 //     send_spi_cmd(spi0, 0x2C); // Memory write command (ready to receive pixel data)
 // }
@@ -158,7 +152,7 @@
 //     // Total pixels = width * height
 //     uint32_t total_pixels = TFT_WIDTH * TFT_HEIGHT;
 //     for (uint32_t i = 0; i < total_pixels; i++) {
-//         send_spi_data16(spi0, color);
+//         send_spi_data16(spi0, color, true);
 //     }
 // }
 
@@ -170,7 +164,7 @@
 // // Sets the display window to a single pixel and writes the color
 // void tft_draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
 //     tft_set_window(x, y, x, y);
-//     send_spi_data16(spi0, color);
+//     send_spi_data16(spi0, color, true);
 // }
 
 // // Draw a scaled pixel block (makes text bigger)
@@ -277,6 +271,115 @@
 
 // //////////////////////////////////////////////////////////////////////////////
 
+// // Draw a filled circle with specified color
+// // Parameters: cx, cy = center coordinates, radius = circle radius, color = fill color
+// void tft_draw_circle(uint16_t cx, uint16_t cy, uint16_t radius, uint16_t color) {
+//     // Iterate through all pixels in the bounding box of the circle
+//     for (int16_t y = cy - radius; y <= cy + radius; y++) {
+//         for (int16_t x = cx - radius; x <= cx + radius; x++) {
+//             // Calculate distance from center
+//             int16_t dx = x - cx;
+//             int16_t dy = y - cy;
+//             int32_t distance_squared = dx * dx + dy * dy;
+//             int32_t radius_squared = radius * radius;
+            
+//             // Draw pixel if it's inside the circle
+//             if (distance_squared <= radius_squared) {
+//                 // Check bounds to avoid drawing outside screen
+//                 if (x >= 0 && x < TFT_WIDTH && y >= 0 && y < TFT_HEIGHT) {
+//                     tft_draw_pixel(x, y, color);
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// // Draw a filled rectangle (box) with specified color
+// // Parameters: x0, y0 = top-left corner, x1, y1 = bottom-right corner, color = fill color
+// void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
+//     // Set window to the rectangle area
+//     tft_set_window(x0, y0, x1, y1);
+    
+//     // Calculate number of pixels
+//     uint16_t width = x1 - x0 + 1;
+//     uint16_t height = y1 - y0 + 1;
+//     uint32_t total_pixels = width * height;
+    
+//     // Fill all pixels with the specified color
+//     for (uint32_t i = 0; i < total_pixels; i++) {
+//         send_spi_data16(spi0, color, true);
+//     }
+// }
+
+// // Display Speed: [value] mph in a blue box
+// // Parameters: x, y = position of top-left corner of the label box, speed_value = speed number to display
+// void display_speed(uint16_t x, uint16_t y, float speed_value) {
+//     uint16_t box_width = 220;
+//     uint16_t label_box_height = 30;
+//     uint16_t blue_color = RGB565(0, 0, 255);
+    
+//     // Draw blue box for label
+//     tft_draw_box(x, y, x + box_width - 1, y + label_box_height - 1, blue_color);
+    
+//     // Print "Speed:" label in the blue box
+//     tft_print_string(x + 10, y + 8, "Speed:", RGB565(255, 255, 255), blue_color);
+    
+//     // Format and print the speed value below the box
+//     char speed_buffer[32];
+//     snprintf(speed_buffer, sizeof(speed_buffer), "%.1f mph", speed_value);
+//     tft_print_string(x + 10, y + label_box_height + 10, speed_buffer, 
+//                      RGB565(0, 0, 0), RGB565(255, 255, 255));
+// }
+
+// // Display Location: [lat, lon] in a red box
+// // Parameters: x, y = position of top-left corner of the label box, lat = latitude, lon = longitude
+// void display_location(uint16_t x, uint16_t y, float lat, float lon) {
+//     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;
+//     uint16_t box_width = 220;
+//     uint16_t label_box_height = 30;
+//     uint16_t red_color = RGB565(255, 0, 0);
+    
+//     // Draw red box for label
+//     tft_draw_box(x, y, x + box_width - 1, y + label_box_height - 1, red_color);
+    
+//     // Print "Location:" label in the red box
+//     tft_print_string(x + 10, y + 8, "Location:", RGB565(255, 255, 255), red_color);
+    
+//     // Format and print coordinates below the box
+//     char location_buffer[64];
+//     snprintf(location_buffer, sizeof(location_buffer), "Lat: %.6f", lat);
+//     tft_print_string(x + 10, y + label_box_height + 10, location_buffer, 
+//                      RGB565(0, 0, 0), RGB565(255, 255, 255));
+    
+//     snprintf(location_buffer, sizeof(location_buffer), "Lon: %.6f", lon);
+//     tft_print_string(x + 10, y + label_box_height + 10 + line_height, location_buffer, 
+//                      RGB565(0, 0, 0), RGB565(255, 255, 255));
+// }
+
+// // Display Time: [time_string] in a green box
+// // Parameters: x, y = position of top-left corner of the label box, time_str = time string to display
+// void display_time(uint16_t x, uint16_t y, const char* time_str) {
+//     uint16_t box_width = 220;
+//     uint16_t label_box_height = 30;
+//     uint16_t green_color = RGB565(0, 128, 0);
+    
+//     // Draw green box for label
+//     tft_draw_box(x, y, x + box_width - 1, y + label_box_height - 1, green_color);
+    
+//     // Print "Time:" label in the green box
+//     tft_print_string(x + 10, y + 8, "Time:", RGB565(255, 255, 255), green_color);
+    
+//     // Print time string below the box
+//     tft_print_string(x + 10, y + label_box_height + 10, time_str, 
+//                      RGB565(0, 0, 0), RGB565(255, 255, 255));
+// }
+
+// void display_all(float speed_value, float lat, float lon, const char* time_str){
+//     display_speed(10, 10, speed_value);
+//     display_location(10, 80, lat, lon);
+//     display_time(10, 180, time_str);
+// }
+
 // int main()
 // {
 //     stdio_init_all();
@@ -292,15 +395,25 @@
     
 //     // Fill entire screen with white to clear any grey background
 //     tft_fill_screen(RGB565(255, 255, 255));
+
+//     // Display All
+//     // display_all(65.5, 40.4247, -86.9292, "12:34:56");
+//     // sleep_ms(3000000);
     
-//     // USER INPUT: Change this string to display any text you want
-//     const char* user_input = "Hello. This is 362 final project!";
+//     // Display Speed at the top in a blue box
+//     tft_fill_screen(RGB565(255, 255, 255));
+//     display_speed(10, 10, 65.5);  // Speed of 65.5 mph
+//     sleep_ms(3000);
     
-//     // Display the user input string in black text on white background with line wrapping
-//     // Line height = scaled font height + spacing
-//     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;  // 4px spacing between lines
-//     tft_print_multiline(10, 20, user_input, 
-//                         RGB565(0, 0, 0), RGB565(255, 255, 255), line_height);
+//     // Display Location below speed in a red box
+//     tft_fill_screen(RGB565(255, 255, 255));
+//     display_location(10, 10, 40.4247, -86.9292);  // Example coordinates
+//     sleep_ms(3000);
     
+//     // Display Time below location in a green box
+//     tft_fill_screen(RGB565(255, 255, 255));
+//     display_time(10, 10, "12:34:56");  // Example time string
+//     sleep_ms(3000);
+
 //     while(1);
 // }
