@@ -54,6 +54,15 @@ typedef enum{
     PAGE_TIME = 2
 } page_t;
 
+//PWM Variables
+#define PWM_PIN0 22 
+#define PWM_PIN1 23 
+#define PWM_PIN2 24 
+static int duty_cycle = 0; 
+static int dir = 0; 
+static int color = 0;
+
+
 // Current LCD Page
 volatile page_t current_page = PAGE_SPEED;
 
@@ -604,6 +613,136 @@ void disp_page(){
     }
 }
 
+//PWM FUNCTIONS
+
+void init_pwm_static(uint32_t period, uint32_t duty_cycle) {
+    gpio_set_function(PWM_PIN0, GPIO_FUNC_PWM);
+    gpio_set_function(PWM_PIN1, GPIO_FUNC_PWM);
+    gpio_set_function(PWM_PIN2, GPIO_FUNC_PWM);
+
+    uint slice_num_0 = pwm_gpio_to_slice_num(PWM_PIN0);
+    uint slice_num_1 = pwm_gpio_to_slice_num(PWM_PIN1);
+    uint slice_num_2 = pwm_gpio_to_slice_num(PWM_PIN2);
+
+    // Same clock divider on all slices
+    pwm_set_clkdiv(slice_num_0, 150.0f);
+    pwm_set_clkdiv(slice_num_1, 150.0f);
+    pwm_set_clkdiv(slice_num_2, 150.0f);
+
+    // Same period (TOP) on all slices
+    pwm_set_wrap(slice_num_0, period - 1);
+    pwm_set_wrap(slice_num_1, period - 1);
+    pwm_set_wrap(slice_num_2, period - 1);
+
+    // Initial duty on each pin (using correct channel for each GPIO)
+    pwm_set_chan_level(slice_num_0, pwm_gpio_to_channel(PWM_PIN0), duty_cycle);
+    pwm_set_chan_level(slice_num_1, pwm_gpio_to_channel(PWM_PIN1), duty_cycle);
+    pwm_set_chan_level(slice_num_2, pwm_gpio_to_channel(PWM_PIN2), duty_cycle);
+
+    // Enable all slices
+    pwm_set_enabled(slice_num_0, true);
+    pwm_set_enabled(slice_num_1, true);
+    pwm_set_enabled(slice_num_2, true);
+}
+
+void pwm_breathing() {
+    // Clear interrupt for the slice we enabled (PIN0's slice)
+    uint slice_num_0 = pwm_gpio_to_slice_num(PWM_PIN0);
+    pwm_hw->intr = 1u << slice_num_0;
+
+    // 1) Read speed from GPS: gps.ground_speed is a NMEA string in knots
+    float speed_setting = 0.0f;
+
+    if (gps.ground_speed != NULL && gps.ground_speed[0] != '\0') {
+        // Convert ASCII to float; ignores errors by passing NULL
+        speed_setting = strtof(gps.ground_speed, NULL);
+    }
+
+    // 2) Map speed to step size (how fast we breathe)
+    //    More speed -> larger step -> faster breathing
+    int step = 1;  // minimum step
+
+    if (speed_setting > 0.0f) {
+        step = (int)(speed_setting / 5.0f);   // tweak divisor as you like
+        if (step < 1)  step = 1;
+        if (step > 10) step = 10;             // clamp max speed
+    }
+
+    // 3) Breathing logic
+
+    if (speed_setting > 0.0f) {
+        // --- Normal breathing, speed > 0 ---
+
+        // At peak: flip direction and advance color
+        if (dir == 0 && duty_cycle >= 100) {
+            duty_cycle = 100;
+            dir = 1;
+            color = (color + 1) % 3;  // next LED
+        }
+        // At bottom: flip to inhale
+        else if (dir == 1 && duty_cycle <= 0) {
+            duty_cycle = 0;
+            dir = 0;
+        }
+
+        // Apply step
+        if (dir == 0) {
+            duty_cycle += step;
+            if (duty_cycle > 100) duty_cycle = 100;
+        } else {
+            duty_cycle -= step;
+            if (duty_cycle < 0) duty_cycle = 0;
+        }
+    } else {
+        // --- Speed == 0: finish exhale and stay low ---
+
+        if (duty_cycle > 0) {
+            // If we were inhaling, switch to exhale
+            if (dir == 0) dir = 1;
+
+            duty_cycle -= 1;
+            if (duty_cycle < 0) duty_cycle = 0;
+        } else {
+            // Already fully exhaled: hold off
+            duty_cycle = 0;
+            dir = 1;   // keep direction as "exhale"
+        }
+    }
+
+    // 4) Apply duty_cycle to the currently active LED
+    int pins[] = {PWM_PIN0, PWM_PIN1, PWM_PIN2};
+    uint active_pin   = pins[color];
+    uint slice_temp   = pwm_gpio_to_slice_num(active_pin);
+    uint current_top  = pwm_hw->slice[slice_temp].top;
+
+    uint32_t level = ((uint32_t)current_top * (uint32_t)duty_cycle) / 100u;
+
+    pwm_set_chan_level(slice_temp, pwm_gpio_to_channel(active_pin), level);
+}
+
+void init_pwm_irq() {
+    // Use the slice that drives PWM_PIN0 for the IRQ
+    uint slice_num_0 = pwm_gpio_to_slice_num(PWM_PIN0);
+
+    irq_set_exclusive_handler(PWM_DEFAULT_IRQ_NUM(), pwm_breathing);
+    irq_set_enabled(PWM_DEFAULT_IRQ_NUM(), true);
+    pwm_set_irq0_enabled(slice_num_0, true);
+
+    uint current_period = pwm_hw->slice[slice_num_0].top;
+
+    // Start fully bright and exhaling
+    duty_cycle = 100;
+    dir = 1;
+    color = 0;  // start on PWM_PIN0
+
+    uint slice_num_1 = pwm_gpio_to_slice_num(PWM_PIN1);
+    uint slice_num_2 = pwm_gpio_to_slice_num(PWM_PIN2);
+
+    // Initialize all slices to full brightness at startup
+    pwm_set_both_levels(slice_num_0, current_period, current_period);
+    pwm_set_both_levels(slice_num_1, current_period, current_period);
+    pwm_set_both_levels(slice_num_2, current_period, current_period);
+}
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -618,6 +757,14 @@ int main()
     init_disp();
     tft_init();
     page_sel_init();
+
+    // --- NEW: Start PWM breathing ---
+    uint32_t period = 1000;     // tune as desired
+    uint32_t initial_dc = 0;    // start from 0% and let ISR drive it
+
+    init_pwm_static(period, initial_dc);
+    init_pwm_irq();
+    // -------------------------------
 
     tft_fill_screen(RGB565(255, 255, 255));
 
