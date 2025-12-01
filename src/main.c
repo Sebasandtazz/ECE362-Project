@@ -573,11 +573,32 @@ void gps_periodic_irq() {
     char buf[BUFSIZE];
     uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
     buf[sizeof(buf) - 1] = '\0';
-    tft_print_multiline(10, 20, buf, 
-                         RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
-    //gps_parser(buf);
+    //tft_print_multiline(10, 20, buf, 
+                         //RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
+    disp_page();
+    gps_parser(buf);
     printf("%s",buf);
+}
 
+void disp_page(){
+    switch (current_page) {
+        case PAGE_SPEED:   
+            tft_fill_screen(RGB565(255, 255, 255)); 
+            display_speed(10, 10, gps.ground_speed);
+            break;
+        case PAGE_LOCATION:
+            tft_fill_screen(RGB565(255, 255, 255));
+            display_location(10, 10, gps.latitude, gps.longitude);
+            break;
+        case PAGE_TIME: 
+            tft_fill_screen(RGB565(255, 255, 255)); 
+            display_time(10, 10, gps.time);   
+            break;
+        default:   
+            tft_fill_screen(RGB565(255, 255, 255));
+            display_all(gps.ground_speed, gps.latitude, gps.longitude, gps.time);    
+            break;
+    }
 }
 
 
