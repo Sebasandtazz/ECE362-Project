@@ -46,7 +46,7 @@ typedef struct {
     char* ground_course;
 } gps_data;
 
-gps_data data;
+gps_data gps;
 
 // LCD Page Selection
 typedef enum{
@@ -495,7 +495,7 @@ void init_lcd_disp_dma() {
 void gps_parser(char* message){
     uint8_t i = 0;
     uint8_t message_type = -1;
-    char **tokens;
+    char **tokens = malloc(sizeof(char*)*20);
     const char delimiter[] = ",";
     tokens[0] = strtok(message, delimiter);
     while (tokens[i] != NULL)
@@ -525,9 +525,9 @@ void gps_parser(char* message){
     switch (message_type)
     {
     case 1: // GPRMC
-        data.time = tokens[1];
-        data.ground_speed = tokens[7];
-        data.ground_course = tokens[8];
+        gps.time = tokens[1];
+        gps.ground_speed = tokens[7];
+        gps.ground_course = tokens[8];
         
         break;
     case 2: // GPVTG
@@ -535,16 +535,17 @@ void gps_parser(char* message){
         break;
     
     case 3: // GPGGA
-        data.time = tokens[1];
-        data.latitude = tokens[2]; //Might have to leave it all in str, but soo innefficient
-        data.north_south = tokens[3];
-        data.longitude = tokens[4];
-        data.east_west = tokens[5];
-        data.num_sats = tokens[6];
+        gps.time = tokens[1];
+        gps.latitude = tokens[2]; //Might have to leave it all in str, but soo innefficient
+        gps.north_south = tokens[3];
+        gps.longitude = tokens[4];
+        gps.east_west = tokens[5];
+        gps.num_sats = tokens[6];
         break;
 
     default:
         break;
+    free(tokens);
     }
     
 }
@@ -592,7 +593,7 @@ int main()
     init_spi();
     init_disp();
     tft_init();
-    //page_sel_irq();
+    page_sel_irq();
 
     tft_fill_screen(RGB565(255, 0, 0));
 
