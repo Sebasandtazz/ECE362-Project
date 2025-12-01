@@ -47,7 +47,6 @@ typedef struct {
 } gps_data;
 
 gps_data gps;
-
 // LCD Page Selection
 typedef enum{
     PAGE_SPEED = 0,
@@ -64,6 +63,7 @@ volatile uint64_t last_button_time_us = 0;
 
 /*Prevent Implicit Declarations*/
 void gps_periodic_irq();
+void disp_page();
 
 /*Init of all of the pins used */
 const int button_1 = 21;
@@ -413,26 +413,30 @@ const char* get_page_label(void) {
         default:            return "Unknown";
     }
 }
-
+// TODO this will not actually work as the ISR will not allow for arguments to be made
+// As if this is a software-called function - FIX: seperate ISRs for each or look at how tis handled in lab
 void page_sel_isr(uint gpio, uint32_t events) {
    /*Set up code + global to change page state with different variables displayed*/
+    gpio_acknowledge_irq(gpio, GPIO_IRQ_EDGE_FALL);
     uint64_t now = time_us_64();
     if (now - last_button_time_us < BUTTON_DEBOUNCE_US) {
         return; // debounce
     }
     last_button_time_us = now;
 
-    if (gpio == (uint)button_1) {
+    if (gpio == button_1) {
         // Next page: SPEED -> LOCATION -> TIME -> SPEED
+        tft_fill_screen(RGB565(255,255,255));
         current_page = (current_page + 1) % 3;
-    } else if (gpio == (uint)button_2) {
+    } else if (gpio == button_2) {
         // Previous page
+        tft_fill_screen(RGB565(255,255,255));
         current_page = (current_page + 3 - 1) % 3;
     }
 }
 
 // Init all GPIO pins for page selection buttons 
-void page_sel_irq() {
+void page_sel_init() {
     /*Init all gpio pins for page_sel and led*/
     // Button 1
     gpio_init(button_1);
@@ -494,13 +498,14 @@ void init_lcd_disp_dma() {
 
 void gps_parser(char* message){
     uint8_t i = 0;
-    uint8_t message_type = -1;
+    uint8_t message_type = 0;
     char **tokens = malloc(sizeof(char*)*20);
     const char delimiter[] = ",";
     tokens[0] = strtok(message, delimiter);
     while (tokens[i] != NULL)
     {
         i++;
+        if (i >= 20) break;
         tokens[i] = strtok(NULL, delimiter);
     }
     
@@ -545,9 +550,9 @@ void gps_parser(char* message){
 
     default:
         break;
-    free(tokens);
     }
-    
+    free(tokens);
+
 }
 
 void init_uart_gps() {
@@ -575,27 +580,25 @@ void gps_periodic_irq() {
     buf[sizeof(buf) - 1] = '\0';
     //tft_print_multiline(10, 20, buf, 
                          //RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
+    gps.ground_speed = "BRUHBRUHBRUH";
     disp_page();
     gps_parser(buf);
-    printf("%s",buf);
+    //printf("%s",buf);
+    printf("%s", gps.time);
 }
 
 void disp_page(){
     switch (current_page) {
         case PAGE_SPEED:   
-            tft_fill_screen(RGB565(255, 255, 255)); 
             display_speed(10, 10, gps.ground_speed);
             break;
         case PAGE_LOCATION:
-            tft_fill_screen(RGB565(255, 255, 255));
             display_location(10, 10, gps.latitude, gps.longitude);
             break;
         case PAGE_TIME: 
-            tft_fill_screen(RGB565(255, 255, 255)); 
             display_time(10, 10, gps.time);   
             break;
         default:   
-            tft_fill_screen(RGB565(255, 255, 255));
             display_all(gps.ground_speed, gps.latitude, gps.longitude, gps.time);    
             break;
     }
@@ -614,9 +617,9 @@ int main()
     init_spi();
     init_disp();
     tft_init();
-    page_sel_irq();
+    page_sel_init();
 
-    tft_fill_screen(RGB565(255, 0, 0));
+    tft_fill_screen(RGB565(255, 255, 255));
 
     for(;;);
     return 0;
