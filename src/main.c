@@ -32,20 +32,21 @@ typedef enum {
 module_state_t gps_state = INIT;
 
 typedef struct {
-    uint32_t time;
-    uint8_t date;
-    float_t latitude;
-    char north_south;
-    float_t longitude;
-    char east_west;
-    uint8_t num_sats;
-    uint8_t sat_id;
-    uint8_t sat_elev;
-    uint8_t sat_azimuth;
-    float_t ground_speed;
-    float_t ground_course;
+    char* time;
+    char* date;
+    char* latitude;
+    char* north_south;
+    char* longitude;
+    char* east_west;
+    char* num_sats;
+    char* sat_id;
+    char* sat_elev;
+    char* sat_azimuth;
+    char* ground_speed;
+    char* ground_course;
 } gps_data;
 
+gps_data data;
 
 // LCD Page Selection
 typedef enum{
@@ -491,6 +492,63 @@ void init_lcd_disp_dma() {
     dma_hw->ch[1].ctrl_trig = temp;
 }
 
+void gps_parser(char* message){
+    uint8_t i = 0;
+    uint8_t message_type = -1;
+    char **tokens;
+    const char delimiter[] = ",";
+    tokens[0] = strtok(message, delimiter);
+    while (tokens[i] != NULL)
+    {
+        i++;
+        tokens[i] = strtok(message, delimiter);
+    }
+    
+    // OK, I can't use strcomp in the case function as it isnt constant
+    // I need to figure out a way that I can set this up to be a bitwise status int or smth. I think the solution is to have a
+    // Set of ints above here that 
+
+    if (strcmp(tokens[0],"$GPRMC") == 0)
+    {
+        message_type = 1;
+    }
+    else if (strcmp(tokens[0],"$GPVTG") == 0)
+    {
+        message_type = 2;
+    }
+    else if (strcmp(tokens[0],"$GPGGA") == 0)
+    {
+        message_type = 3;
+    }
+    
+    
+    switch (message_type)
+    {
+    case 1: // GPRMC
+        data.time = tokens[1];
+        data.ground_speed = tokens[7];
+        data.ground_course = tokens[8];
+        
+        break;
+    case 2: // GPVTG
+    
+        break;
+    
+    case 3: // GPGGA
+        data.time = tokens[1];
+        data.latitude = tokens[2]; //Might have to leave it all in str, but soo innefficient
+        data.north_south = tokens[3];
+        data.longitude = tokens[4];
+        data.east_west = tokens[5];
+        data.num_sats = tokens[6];
+        break;
+
+    default:
+        break;
+    }
+    
+}
+
 void init_uart_gps() {
     uart_init(uart1, 9600);
     gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(uart1, 0)); // TODO: double check naming of TX and RX PINS
@@ -498,7 +556,7 @@ void init_uart_gps() {
     uart_set_format(uart1, 8, 1, UART_PARITY_NONE);
     sleep_ms(1);
     uart_write_blocking(uart1, (const uint8_t*) "$PMTK104*37\r\n", strlen("$PMTK104*37\r\n"));
-    uart_write_blocking(uart1,(const uint8_t*) "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C\r\n", strlen("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C<CR><LF>"));
+    uart_write_blocking(uart1,(const uint8_t*) "$PMTK314,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C\r\n", strlen("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C<CR><LF>"));
     /* BITWISE DEFINITION OF OUTPUT 
     0 NMEA_SEN_GLL, // GPGLL interval - Geographic Position - Latitude longitude
     1 NMEA_SEN_RMC, // GPRMC interval - Recommended Minimum Specific GNSS Sentence
@@ -516,6 +574,7 @@ void gps_periodic_irq() {
     buf[sizeof(buf) - 1] = '\0';
     tft_print_multiline(10, 20, buf, 
                          RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
+    gps_parser(buf);
     printf("%s",buf);
 
 }
@@ -533,7 +592,7 @@ int main()
     init_spi();
     init_disp();
     tft_init();
-    page_sel_irq();
+    //page_sel_irq();
 
     tft_fill_screen(RGB565(255, 0, 0));
 
