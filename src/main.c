@@ -501,7 +501,7 @@ void gps_parser(char* message){
     while (tokens[i] != NULL)
     {
         i++;
-        tokens[i] = strtok(message, delimiter);
+        tokens[i] = strtok(NULL, delimiter);
     }
     
     // OK, I can't use strcomp in the case function as it isnt constant
@@ -531,7 +531,7 @@ void gps_parser(char* message){
         
         break;
     case 2: // GPVTG
-    
+        
         break;
     
     case 3: // GPGGA
@@ -575,7 +575,7 @@ void gps_periodic_irq() {
     buf[sizeof(buf) - 1] = '\0';
     tft_print_multiline(10, 20, buf, 
                          RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
-    gps_parser(buf);
+    //gps_parser(buf);
     printf("%s",buf);
 
 }
