@@ -662,10 +662,19 @@ void pwm_breathing() {
     //    More speed -> larger step -> faster breathing
     int step = 1;  // minimum step
 
-    if (speed_setting > 0.0f) {
-        step = (int)(speed_setting / 5.0f);   // tweak divisor as you like
-        if (step < 1)  step = 1;
-        if (step > 10) step = 10;             // clamp max speed
+    if (speed_setting > 0.5f) {                // ignore tiny GPS noise
+        float mph = speed_setting * 1.15078f;  // knots -> mph
+
+        // 0–15 mph   -> step 1  (very gentle)
+        // 15–30 mph  -> step 2
+        // 30–45 mph  -> step 3
+        // 45–60 mph  -> step 4
+        // 60–75 mph  -> step 5
+        // 75+ mph    -> step 6 (max)
+        step = 1 + (int)(mph / 15.0f);
+
+        if (step < 1) step = 1;
+        if (step > 6) step = 6;
     }
 
     // 3) Breathing logic
