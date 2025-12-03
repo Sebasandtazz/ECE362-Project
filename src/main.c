@@ -22,6 +22,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #define BUFSIZE 32
 char strbuf[BUFSIZE];
+#define PI 3.14159265358979323846
 
 typedef enum {
     INIT = 0,
@@ -350,7 +351,7 @@ void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t c
 
 // Display Speed: [value] mph in a blue box
 // Parameters: x, y = position of top-left corner of the label box, speed_str = speed string to display
-void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
+void display_speed(uint16_t x, uint16_t y, const char* speed_str, bool all) {
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t blue_color = RGB565(0, 0, 255);
@@ -363,11 +364,14 @@ void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
     
     // Print the speed value below the box
     tft_print_string(x + 10, y + label_box_height + 10, speed_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    // Print Units
+    tft_print_string(x + 165, y + label_box_height + 10, "MPH", RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
 // Display Location: [lat, lon] in a red box
 // Parameters: x, y = position of top-left corner of the label box, lat_str = latitude string, lon_str = longitude string
-void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir) {
+void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir, bool all) {
     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
@@ -392,10 +396,13 @@ void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* l
 
 // Display Time: [time_string] in a green box
 // Parameters: x, y = position of top-left corner of the label box, time_str = time string to display
-void display_time(uint16_t x, uint16_t y, const char* time_str) {
+void display_time(uint16_t x, uint16_t y, const char* time_str, bool all) {
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t green_color = RGB565(0, 128, 0);
+
+    int center_x = 120;
+    int center_y = 200;
     
     // Draw green box for label
     tft_draw_box(x, y, x + box_width - 1, y + label_box_height - 1, green_color);
@@ -403,14 +410,95 @@ void display_time(uint16_t x, uint16_t y, const char* time_str) {
     // Print "Time:" label in the green box
     tft_print_string(x + 10, y + 8, "Time:", RGB565(255, 255, 255), green_color);
     
+    // Parse Time String (assumes format like "123456" or "12:34:56")
+    size_t num_substrings = 3;  // HH, MM, SS (not 5)
+    char** time_arr = (char**)malloc(num_substrings * sizeof(char*));
+    
+    // Allocate Memory for Parsed Times
+    for (size_t i = 0; i < num_substrings; ++i) {
+        time_arr[i] = (char*)malloc(3 * sizeof(char)); // 2 digits + null terminator
+        strncpy(time_arr[i], time_str + (i * 2), 2);
+        time_arr[i][2] = '\0'; // Null-terminate the substring
+    }
+
     // Print time string below the box
-    tft_print_string(x + 10, y + label_box_height + 10, time_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, time_arr[0], RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 45, y + label_box_height + 10, ":", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 60, y + label_box_height + 10, time_arr[1], RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 95, y + label_box_height + 10,":", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 110, y + label_box_height + 10, time_arr[2], RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Print Clock Face
+        tft_draw_circle(center_x, center_y, 100, green_color);
+        tft_print_string(105, 105, "12", RGB565(255, 255, 255), green_color);
+        tft_print_string(155, 120, "1", RGB565(255, 255, 255), green_color);
+        tft_print_string(185, 155, "2", RGB565(255, 255, 255), green_color);
+        tft_print_string(200, 192, "3", RGB565(255, 255, 255), green_color);
+        tft_print_string(185, 229, "4", RGB565(255, 255, 255), green_color);
+        tft_print_string(155, 264, "5", RGB565(255, 255, 255), green_color);
+        tft_print_string(110, 280, "6", RGB565(255, 255, 255), green_color);
+        tft_print_string(65, 264, "7", RGB565(255, 255, 255), green_color);
+        tft_print_string(35, 229, "8", RGB565(255, 255, 255), green_color);
+        tft_print_string(25, 192, "9", RGB565(255, 255, 255), green_color);
+        tft_print_string(35, 155, "10", RGB565(255, 255, 255), green_color);
+        tft_print_string(65, 120, "11", RGB565(255, 255, 255), green_color);
+        tft_draw_circle(center_x, center_y, 6, RGB565(255, 255, 255));
+
+        // Print Clock Hands
+        int time_hour = atoi(time_arr[0]);
+        int time_min = atoi(time_arr[1]);
+        int time_sec = atoi(time_arr[2]);
+        
+        // Calculate angles in radians (need to use float/double, not int)
+        // Hour hand: 12-hour format, position based on hour + minute fraction
+        float hour_angle = ((time_hour % 12) * 30.0f + time_min * 0.5f) * (PI / 180.0f) - (PI / 2.0f);
+        // Minute hand: position based on minutes
+        float min_angle = (time_min * 6.0f) * (PI / 180.0f) - (PI / 2.0f);
+        
+        // Calculate hand endpoints (hour hand shorter, minute hand longer)
+        int hour_radius = 50;  // Hour hand length
+        int min_radius = 70;   // Minute hand length
+        
+        int x_hour = center_x + hour_radius * cosf(hour_angle);
+        int y_hour = center_y + hour_radius * sinf(hour_angle);
+        int x_min = center_x + min_radius * cosf(min_angle);
+        int y_min = center_y + min_radius * sinf(min_angle);
+        
+        // Calculate second hand angle (seconds * 6 degrees per second)
+        float sec_angle = (time_sec * 6.0f) * (PI / 180.0f) - (PI / 2.0f);
+        
+        // Calculate second hand endpoint (longest hand)
+        int sec_radius = 85;  // Second hand length (longer than minute hand)
+        int x_sec = center_x + sec_radius * cosf(sec_angle);
+        int y_sec = center_y + sec_radius * sinf(sec_angle);
+
+        // Draw clock hands with different thicknesses
+        int hour_hand_width = 4;  // Thicker hour hand
+        int min_hand_width = 4;   // Thinner minute hand
+        int sec_hand_width = 3;   // Thinnest second hand
+        
+        // Draw second hand first (longest, goes on bottom layer)
+        tft_draw_thick_line(center_x, center_y, x_sec, y_sec, sec_hand_width, RGB565(225, 225, 255));  // Red second hand
+        
+        // Draw minute hand second
+        tft_draw_thick_line(center_x, center_y, x_min, y_min, min_hand_width, RGB565(255, 255, 255));
+        
+        // Draw hour hand third (so it appears on top)
+        tft_draw_thick_line(center_x, center_y, x_hour, y_hour, hour_hand_width, RGB565(255, 255, 255));
+    }
+
+    // Free Memory of Parsed Times
+    for (size_t i = 0; i < num_substrings; ++i) {
+        free(time_arr[i]);
+    }
+    free(time_arr);
 }
 
 void display_all(const char* speed_str, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir, const char* time_str){
-    display_speed(10, 10, speed_str);
-    display_location(10, 80, lat_str, lat_dir, lon_str, lon_dir);
-    display_time(10, 180, time_str);
+    display_speed(10, 10, speed_str, 1);
+    display_location(10, 80, lat_str, lat_dir, lon_str, lon_dir, 1);
+    display_time(10, 180, time_str, 1);
 }
 
 // Helper to get a label for the current page 
@@ -599,13 +687,13 @@ void gps_periodic_irq() {
 void disp_page(){
     switch (current_page) {
         case PAGE_SPEED:   
-            display_speed(10, 10, gps.ground_speed);
+            display_speed(10, 10, gps.ground_speed, 0);
             break;
         case PAGE_LOCATION:
-            display_location(10, 10, gps.latitude, gps.north_south, gps.longitude, gps.east_west);
+            display_location(10, 10, gps.latitude, gps.north_south, gps.longitude, gps.east_west, 0);
             break;
         case PAGE_TIME: 
-            display_time(10, 10, gps.time);   
+            display_time(10, 10, gps.time, 0);   
             break;
         default:   
             display_all(gps.ground_speed, gps.latitude, gps.north_south, gps.longitude, gps.east_west, gps.time);    
