@@ -362,13 +362,12 @@ void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
     tft_print_string(x + 10, y + 8, "Speed:", RGB565(255, 255, 255), blue_color);
     
     // Print the speed value below the box
-    tft_print_string(x + 10, y + label_box_height + 10, speed_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, speed_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
 // Display Location: [lat, lon] in a red box
 // Parameters: x, y = position of top-left corner of the label box, lat_str = latitude string, lon_str = longitude string
-void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lon_str) {
+void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir) {
     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
@@ -381,12 +380,14 @@ void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* l
     tft_print_string(x + 10, y + 8, "Location:", RGB565(255, 255, 255), red_color);
     
     // Print latitude below the box
-    tft_print_string(x + 10, y + label_box_height + 10, lat_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, "Lat: ", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 80, y + label_box_height + 10, lat_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 200, y + label_box_height + 10, lat_dir, RGB565(0, 0, 0), RGB565(255, 255, 255));
     
     // Print longitude below latitude
-    tft_print_string(x + 10, y + label_box_height + 10 + line_height, lon_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10 + line_height, "Lon: ", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 80, y + label_box_height + 10 + line_height, lon_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 200, y + label_box_height + 10 + line_height, lon_dir, RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
 // Display Time: [time_string] in a green box
@@ -403,13 +404,12 @@ void display_time(uint16_t x, uint16_t y, const char* time_str) {
     tft_print_string(x + 10, y + 8, "Time:", RGB565(255, 255, 255), green_color);
     
     // Print time string below the box
-    tft_print_string(x + 10, y + label_box_height + 10, time_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, time_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
 }
 
-void display_all(const char* speed_str, const char* lat_str, const char* lon_str, const char* time_str){
+void display_all(const char* speed_str, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir, const char* time_str){
     display_speed(10, 10, speed_str);
-    display_location(10, 80, lat_str, lon_str);
+    display_location(10, 80, lat_str, lat_dir, lon_str, lon_dir);
     display_time(10, 180, time_str);
 }
 
@@ -593,7 +593,7 @@ void gps_periodic_irq() {
     disp_page();
     gps_parser(buf);
     //printf("%s",buf);
-    printf("%s", gps.time);
+    //printf("%s", gps.time);
 }
 
 void disp_page(){
@@ -602,13 +602,13 @@ void disp_page(){
             display_speed(10, 10, gps.ground_speed);
             break;
         case PAGE_LOCATION:
-            display_location(10, 10, gps.latitude, gps.longitude);
+            display_location(10, 10, gps.latitude, gps.north_south, gps.longitude, gps.east_west);
             break;
         case PAGE_TIME: 
             display_time(10, 10, gps.time);   
             break;
         default:   
-            display_all(gps.ground_speed, gps.latitude, gps.longitude, gps.time);    
+            display_all(gps.ground_speed, gps.latitude, gps.north_south, gps.longitude, gps.east_west, gps.time);    
             break;
     }
 }
