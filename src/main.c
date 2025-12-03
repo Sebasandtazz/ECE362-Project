@@ -333,6 +333,29 @@ void tft_print_multiline(uint16_t start_x, uint16_t start_y, const char* str,
 
 //////////////////////////////////////////////////////////////////////////////
 
+// Draw a filled circle with specified color
+// Parameters: cx, cy = center coordinates, radius = circle radius, color = fill color
+void tft_draw_circle(uint16_t cx, uint16_t cy, uint16_t radius, uint16_t color) {
+    // Iterate through all pixels in the bounding box of the circle
+    for (int16_t y = cy - radius; y <= cy + radius; y++) {
+        for (int16_t x = cx - radius; x <= cx + radius; x++) {
+            // Calculate distance from center
+            int16_t dx = x - cx;
+            int16_t dy = y - cy;
+            int32_t distance_squared = dx * dx + dy * dy;
+            int32_t radius_squared = radius * radius;
+            
+            // Draw pixel if it's inside the circle
+            if (distance_squared <= radius_squared) {
+                // Check bounds to avoid drawing outside screen
+                if (x >= 0 && x < TFT_WIDTH && y >= 0 && y < TFT_HEIGHT) {
+                    tft_draw_pixel(x, y, color);
+                }
+            }
+        }
+    }
+}
+
 // Draw a filled rectangle (box) with specified color
 // Parameters: x0, y0 = top-left corner, x1, y1 = bottom-right corner, color = fill color
 void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
@@ -347,6 +370,63 @@ void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t c
     // Fill all pixels with the specified color
     for (uint32_t i = 0; i < total_pixels; i++) {
         send_spi_data16(spi0, color, true);
+    }
+}
+
+// Draw a line from (x0, y0) to (x1, y1) with specified color
+// Uses Bresenham's line algorithm for efficient line drawing
+// Parameters: x0, y0 = start point, x1, y1 = end point, color = line color
+void tft_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
+    int16_t dx = abs((int16_t)x1 - (int16_t)x0);
+    int16_t dy = abs((int16_t)y1 - (int16_t)y0);
+    int16_t sx = x0 < x1 ? 1 : -1;
+    int16_t sy = y0 < y1 ? 1 : -1;
+    int16_t err = dx - dy;
+    int16_t e2;
+    uint16_t x = x0;
+    uint16_t y = y0;
+    
+    while (1) {
+        // Draw pixel if within screen bounds
+        if (x < TFT_WIDTH && y < TFT_HEIGHT) {
+            tft_draw_pixel(x, y, color);
+        }
+        
+        // Check if we've reached the end point
+        if (x == x1 && y == y1) {
+            break;
+        }
+        
+        e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+// Draw a thick line from (x0, y0) to (x1, y1) with specified width and color
+// Parameters: x0, y0 = start point, x1, y1 = end point, width = line width in pixels, color = line color
+void tft_draw_thick_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t width, uint16_t color) {
+    // Calculate the perpendicular direction for the width offset
+    float dx = (float)x1 - (float)x0;
+    float dy = (float)y1 - (float)y0;
+    float length = sqrtf(dx * dx + dy * dy);
+        
+    // Normalize and get perpendicular vector
+    float perp_x = -dy / length;
+    float perp_y = dx / length;
+    
+    // Draw multiple parallel lines to create thickness
+    int half_width = width / 2;
+    for (int offset = -half_width; offset <= half_width; offset++) {
+        int offset_x = (int)(perp_x * offset);
+        int offset_y = (int)(perp_y * offset);
+        tft_draw_line(x0 + offset_x, y0 + offset_y, x1 + offset_x, y1 + offset_y, color);
     }
 }
 
