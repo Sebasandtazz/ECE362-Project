@@ -352,7 +352,7 @@ void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t c
 // Display Speed: [value] mph in a blue box
 // Parameters: x, y = position of top-left corner of the label box, speed_str = speed string to display
 void display_speed(uint16_t x, uint16_t y, const char* speed_str, bool all) {
-    uint16_t box_width = 220;
+        uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t blue_color = RGB565(0, 0, 255);
     
@@ -366,7 +366,48 @@ void display_speed(uint16_t x, uint16_t y, const char* speed_str, bool all) {
     tft_print_string(x + 10, y + label_box_height + 10, speed_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
 
     // Print Units
-    tft_print_string(x + 165, y + label_box_height + 10, "MPH", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 150, y + label_box_height + 10, "km/h", RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Progress bar dimensions
+        uint16_t progress_bar_y = y + label_box_height + 100;  // Position below speed text
+        uint16_t progress_bar_height = 15;  // Height of progress bar
+        uint16_t progress_bar_x_start = x + 10;
+        uint16_t progress_bar_x_end = x + box_width - 11;
+        uint16_t progress_bar_width = progress_bar_x_end - progress_bar_x_start + 1;
+        
+        // Draw progress bar background (empty bar in light gray)
+        tft_draw_box(progress_bar_x_start, progress_bar_y, progress_bar_x_end, progress_bar_y + progress_bar_height - 1, RGB565(200, 200, 200));
+        
+        int max_speed = 150;
+
+        // Calculate percentage filled (convert speed_str to float)
+        float current_speed = atof(speed_str);
+        float percentage = (current_speed / max_speed) * 100.0f;
+        if (percentage > 100.0f) percentage = 100.0f;  // Cap at 100%
+        if (percentage < 0.0f) percentage = 0.0f;      // Minimum 0%
+        
+        // Calculate filled width
+        uint16_t filled_width = (uint16_t)((percentage / 100.0f) * progress_bar_width);
+        
+        // Draw filled portion of progress bar in blue (or green/yellow/red based on speed)
+        uint16_t progress_color = blue_color;  // Default blue
+        if (percentage > 80.0f) {
+            progress_color = RGB565(255, 0, 0);  // Red for high speed
+        } else if (percentage > 60.0f) {
+            progress_color = RGB565(255, 165, 0);  // Orange for medium-high
+        } else {
+            progress_color = RGB565(0, 255, 0);  // Green for normal speed
+        }
+        
+        if (filled_width > 0) {
+            tft_draw_box(progress_bar_x_start, progress_bar_y, 
+                        progress_bar_x_start + filled_width - 1, 
+                        progress_bar_y + progress_bar_height - 1, progress_color);
+        }
+        tft_print_string(progress_bar_x_start, progress_bar_y + progress_bar_height + 10, "0", RGB565(0, 0, 0), RGB565(255, 255, 255));
+        tft_print_string(progress_bar_x_end - 50, progress_bar_y + progress_bar_height + 10, "150", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    }
 }
 
 // Display Location: [lat, lon] in a red box
