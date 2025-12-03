@@ -20,7 +20,7 @@
 /*Hardware mtk3339 Headers*/
 //#include "gpsdata.h"
 //////////////////////////////////////////////////////////////////////////////
-#define BUFSIZE 32
+#define BUFSIZE 512
 char strbuf[BUFSIZE];
 
 typedef enum {
@@ -32,18 +32,19 @@ typedef enum {
 module_state_t gps_state = INIT;
 
 typedef struct {
-    char* time;
-    char* date;
-    char* latitude;
-    char* north_south;
-    char* longitude;
-    char* east_west;
-    char* num_sats;
-    char* sat_id;
-    char* sat_elev;
-    char* sat_azimuth;
-    char* ground_speed;
-    char* ground_course;
+    char ptmk[16];
+    char time[16];
+    char date[16];
+    char latitude[16];
+    char north_south[16];
+    char longitude[16];
+    char east_west[16];
+    char num_sats[16];
+    char sat_id[16];
+    char sat_elev[16];
+    char sat_azimuth[16];
+    char ground_speed[16];
+    char ground_course[16];
 } gps_data;
 
 gps_data gps;
@@ -475,7 +476,7 @@ uint32_t last_set_time = 0;
 
 void timer_isr() {
     /*Setting up timer leaving my code here for reference*/
-    timer0_hw->intr = 1u << 1;
+    timer0_hw->intr = 1u << 0;
     last_set_time = timer0_hw->timerawl;
     gps_periodic_irq();
     timer0_hw->alarm[0] = timer0_hw->timerawl + 2500;
@@ -483,27 +484,26 @@ void timer_isr() {
     // fill in the code here to send ALL startup functions to the GPS
 }
 
+void screen_isr() {
+    /*Setting up timer leaving my code here for reference*/
+    timer0_hw->intr = 1u << 1;
+    last_set_time = timer0_hw->timerawl;
+    disp_page();
+    timer0_hw->alarm[1] = timer0_hw->timerawl + 25000;   
+}
+
 void init_startup_timer() {
     /*Setting up a timer, it wont be the exact same but it should be similar for startup stuff*/
     timer0_hw->alarm[0] = 1E6;
+    timer0_hw->alarm[1] = 11E5;
     irq_set_exclusive_handler(TIMER0_IRQ_0, timer_isr);
+    irq_set_exclusive_handler(TIMER0_IRQ_1, screen_isr);
     timer0_hw->inte = 1u << 0;
+    timer0_hw->inte |= 1u << 1;
     irq_set_enabled(TIMER0_IRQ_0, true);
+    irq_set_enabled(TIMER0_IRQ_1, true);
 }
 
-void init_lcd_disp_dma() {
-    /*Once again, not exactly the same as this but if all values here are corrected it will work*/
-    uint32_t temp = 0;
-    //dma_hw->ch[1].read_addr = &uart1_hw->dr;
-    //dma_hw->ch[1].write_addr = &spi1_hw->dr;
-    dma_hw->ch[1].transfer_count = (8 | 0xf << 28);
-    temp |= (1u << 2);
-    temp |= (1u << 4);
-    temp |= (4u << 8);
-    temp |= (26u << 17);
-    temp |= (1u << 0);
-    dma_hw->ch[1].ctrl_trig = temp;
-}
 
 void gps_parser(char* message){
     uint8_t i = 0;
@@ -534,34 +534,36 @@ void gps_parser(char* message){
     {
         message_type = 3;
     }
-    
-    
-    switch (message_type)
+    else
     {
-    case 1: // GPRMC
-        gps.time = tokens[1];
-        gps.ground_speed = tokens[7];
-        gps.ground_course = tokens[8];
-        
-        break;
-    case 2: // GPVTG
-        
-        break;
-    
-    case 3: // GPGGA
-        gps.time = tokens[1];
-        gps.latitude = tokens[2]; //Might have to leave it all in str, but soo innefficient
-        gps.north_south = tokens[3];
-        gps.longitude = tokens[4];
-        gps.east_west = tokens[5];
-        gps.num_sats = tokens[6];
-        break;
+        return;
+    }
+    strcpy(gps.ptmk, tokens[0]);
 
-    default:
-        break;
+    
+    switch (message_type){
+        case 1: // GPRMC
+            strcpy(gps.ground_speed, tokens[7]);
+            strcpy(gps.ground_course, tokens[8]);
+            break;
+
+        case 2: // GPVTG
+            // Fill this if needed
+            break;
+
+        case 3: // GPGGA
+            strcpy(gps.time, tokens[1]);
+            strcpy(gps.latitude, tokens[2]); 
+            strcpy(gps.north_south, tokens[3]);
+            strcpy(gps.longitude, tokens[4]);
+            strcpy(gps.east_west, tokens[5]);
+            strcpy(gps.num_sats, tokens[6]);
+            break;
+
+        default:
+            break;
     }
     free(tokens);
-
 }
 
 void init_uart_gps() {
@@ -584,16 +586,28 @@ void init_uart_gps() {
 }
 
 void gps_periodic_irq() {
+    // UGHUGHUGH I cant do uart_read_blocking because
+    // The data length is constantly changing.
+    // This means I have to do by char...
     char buf[BUFSIZE];
-    uart_read_blocking(uart1, (uint8_t*)buf, sizeof(buf) - 1);   
+    //uart_read_blocking(uart1, buf, BUFSIZE);
+    char curr;
+    int16_t chars = BUFSIZE * 4;
+    for (size_t i = 0; i < chars; ++i) {
+        curr = uart_getc(uart1);
+        if (curr == '\n')
+        {
+            break;
+        }
+        buf[i] = curr;
+        //printf("%c");
+    }
     buf[sizeof(buf) - 1] = '\0';
     //tft_print_multiline(10, 20, buf, 
                          //RGB565(255, 255, 255), RGB565(255, 0, 0), line_height);
-    gps.ground_speed = "BRUHBRUHBRUH";
-    disp_page();
-    gps_parser(buf);
-    //printf("%s",buf);
-    printf("%s", gps.time);
+    //printf("%s\n",buf);
+    gps_parser(buf);    
+    printf("%s, %s, %s, %s\n", gps.ptmk, gps.time, gps.ground_speed, gps.latitude);
 }
 
 void disp_page(){
@@ -671,21 +685,17 @@ void pwm_breathing() {
     // 3) Breathing logic
 
     if (speed_setting > 0.0f) {
-        // --- Normal breathing, speed > 0 ---
-
-        // At peak: flip direction and advance color
         if (dir == 0 && duty_cycle >= 100) {
             duty_cycle = 100;
             dir = 1;
             color = (color + 1) % 3;  // next LED
         }
-        // At bottom: flip to inhale
+
         else if (dir == 1 && duty_cycle <= 0) {
             duty_cycle = 0;
             dir = 0;
         }
 
-        // Apply step
         if (dir == 0) {
             duty_cycle += step;
             if (duty_cycle > 100) duty_cycle = 100;
@@ -758,7 +768,6 @@ int main()
     tft_init();
     page_sel_init();
 
-    // --- NEW: Start PWM breathing ---
     uint32_t period = 1000;     // tune as desired
     uint32_t initial_dc = 0;    // start from 0% and let ISR drive it
 
