@@ -433,6 +433,73 @@ void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* l
     tft_print_string(x + 10, y + label_box_height + 10 + line_height, "Lon: ", RGB565(0, 0, 0), RGB565(255, 255, 255));
     tft_print_string(x + 80, y + label_box_height + 10 + line_height, lon_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
     tft_print_string(x + 200, y + label_box_height + 10 + line_height, lon_dir, RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Print Compass Face
+        uint16_t compass_color = RGB565(150, 75, 0);
+        tft_draw_circle(120, 200, 80, compass_color);
+        tft_print_string(115, 130, "N", RGB565(0, 0, 0),compass_color);
+        tft_print_string(175, 195, "E", RGB565(0, 0, 0),compass_color);
+        tft_print_string(115, 260, "S", RGB565(0, 0, 0),compass_color);
+        tft_print_string(50, 195, "W", RGB565(0, 0, 0),compass_color);
+
+        // Print Direction Line
+        // Compass center is at (120, 200) with radius 80
+        int center_x = 120;
+        int center_y = 200;
+        int radius = 60;  // Line length from center
+        
+        int x_end = center_x;  // Initialize to center (fallback)
+        int y_end = center_y;  // Initialize to center (fallback)
+        
+        // Determine direction based on lat_dir and lon_dir strings
+        char lat_char = lat_dir[0];  // Get first character (N or S)
+        char lon_char = lon_dir[0];  // Get first character (E or W)
+        
+        if(lat_char == 'N' && lon_char == 'E'){
+            // North-East: x increases (east), y decreases (north)
+            x_end = center_x + radius - 10;
+            y_end = center_y - radius + 10;
+        }
+        else if(lat_char == 'N' && lon_char == 'W'){
+            // North-West: x decreases (west), y decreases (north)
+            x_end = center_x - radius + 10;
+            y_end = center_y - radius +10;
+        }
+        else if(lat_char == 'S' && lon_char == 'E'){
+            // South-East: x increases (east), y increases (south)
+            x_end = center_x + radius - 10;
+            y_end = center_y + radius - 10;
+        }
+        else if(lat_char == 'S' && lon_char == 'W'){
+            // South-West: x decreases (west), y increases (south)
+            x_end = center_x - radius + 10;
+            y_end = center_y + radius - 10;
+        }
+        else if(lat_char == 'N'){
+            // North only
+            x_end = center_x;
+            y_end = center_y - radius + 10;
+        }
+        else if(lat_char == 'S'){
+            // South only
+            x_end = center_x;
+            y_end = center_y + radius - 10;
+        }
+        else if(lon_char == 'E'){
+            // East only
+            x_end = center_x + radius - 10;
+            y_end = center_y;
+        }
+        else if(lon_char == 'W'){
+            // West only
+            x_end = center_x - radius + 10;
+            y_end = center_y;
+        }
+        
+        // Draw the direction line from center to calculated endpoint
+        tft_draw_thick_line(center_x, center_y, x_end, y_end, 6, red_color);
+    }
 }
 
 // Display Time: [time_string] in a green box
