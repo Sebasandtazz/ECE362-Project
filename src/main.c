@@ -22,6 +22,7 @@
 //////////////////////////////////////////////////////////////////////////////
 #define BUFSIZE 256
 char strbuf[BUFSIZE];
+#define PI 3.14159265358979323846
 
 typedef enum {
     INIT = 0,
@@ -333,6 +334,29 @@ void tft_print_multiline(uint16_t start_x, uint16_t start_y, const char* str,
 
 //////////////////////////////////////////////////////////////////////////////
 
+// Draw a filled circle with specified color
+// Parameters: cx, cy = center coordinates, radius = circle radius, color = fill color
+void tft_draw_circle(uint16_t cx, uint16_t cy, uint16_t radius, uint16_t color) {
+    // Iterate through all pixels in the bounding box of the circle
+    for (int16_t y = cy - radius; y <= cy + radius; y++) {
+        for (int16_t x = cx - radius; x <= cx + radius; x++) {
+            // Calculate distance from center
+            int16_t dx = x - cx;
+            int16_t dy = y - cy;
+            int32_t distance_squared = dx * dx + dy * dy;
+            int32_t radius_squared = radius * radius;
+            
+            // Draw pixel if it's inside the circle
+            if (distance_squared <= radius_squared) {
+                // Check bounds to avoid drawing outside screen
+                if (x >= 0 && x < TFT_WIDTH && y >= 0 && y < TFT_HEIGHT) {
+                    tft_draw_pixel(x, y, color);
+                }
+            }
+        }
+    }
+}
+
 // Draw a filled rectangle (box) with specified color
 // Parameters: x0, y0 = top-left corner, x1, y1 = bottom-right corner, color = fill color
 void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
@@ -350,9 +374,69 @@ void tft_draw_box(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t c
     }
 }
 
-// Display Speed: [value] mph in a blue box
-// Parameters: x, y = position of top-left corner of the label box, speed_str = speed string to display
-void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
+// Draw a line from (x0, y0) to (x1, y1) with specified color
+// Uses Bresenham's line algorithm for efficient line drawing
+// Parameters: x0, y0 = start point, x1, y1 = end point, color = line color
+void tft_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
+    int16_t dx = abs((int16_t)x1 - (int16_t)x0);
+    int16_t dy = abs((int16_t)y1 - (int16_t)y0);
+    int16_t sx = x0 < x1 ? 1 : -1;
+    int16_t sy = y0 < y1 ? 1 : -1;
+    int16_t err = dx - dy;
+    int16_t e2;
+    uint16_t x = x0;
+    uint16_t y = y0;
+    
+    while (1) {
+        // Draw pixel if within screen bounds
+        if (x < TFT_WIDTH && y < TFT_HEIGHT) {
+            tft_draw_pixel(x, y, color);
+        }
+        
+        // Check if we've reached the end point
+        if (x == x1 && y == y1) {
+            break;
+        }
+        
+        e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+// Draw a thick line from (x0, y0) to (x1, y1) with specified width and color
+// Parameters: x0, y0 = start point, x1, y1 = end point, width = line width in pixels, color = line color
+void tft_draw_thick_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t width, uint16_t color) {
+    // Calculate the perpendicular direction for the width offset
+    float dx = (float)x1 - (float)x0;
+    float dy = (float)y1 - (float)y0;
+    float length = sqrtf(dx * dx + dy * dy);
+        
+    // Normalize and get perpendicular vector
+    float perp_x = -dy / length;
+    float perp_y = dx / length;
+    
+    // Draw multiple parallel lines to create thickness
+    int half_width = width / 2;
+    for (int offset = -half_width; offset <= half_width; offset++) {
+        int offset_x = (int)(perp_x * offset);
+        int offset_y = (int)(perp_y * offset);
+        tft_draw_line(x0 + offset_x, y0 + offset_y, x1 + offset_x, y1 + offset_y, color);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Display Speed: [value] km/h in a blue box with progress bar
+// Parameters: x, y = position of top-left corner of the label box, 
+//             speed_str = speed string to display, max_speed = maximum speed for progress bar, all = display mode
+void display_speed(uint16_t x, uint16_t y, const char* speed_str, bool all) {
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t blue_color = RGB565(0, 0, 255);
@@ -364,13 +448,56 @@ void display_speed(uint16_t x, uint16_t y, const char* speed_str) {
     tft_print_string(x + 10, y + 8, "Speed:", RGB565(255, 255, 255), blue_color);
     
     // Print the speed value below the box
-    tft_print_string(x + 10, y + label_box_height + 10, speed_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, speed_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    // Print Units
+    tft_print_string(x + 150, y + label_box_height + 10, "km/h", RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Progress bar dimensions
+        uint16_t progress_bar_y = y + label_box_height + 100;  // Position below speed text
+        uint16_t progress_bar_height = 15;  // Height of progress bar
+        uint16_t progress_bar_x_start = x + 10;
+        uint16_t progress_bar_x_end = x + box_width - 11;
+        uint16_t progress_bar_width = progress_bar_x_end - progress_bar_x_start + 1;
+        
+        // Draw progress bar background (empty bar in light gray)
+        tft_draw_box(progress_bar_x_start, progress_bar_y, progress_bar_x_end, progress_bar_y + progress_bar_height - 1, RGB565(200, 200, 200));
+        
+        int max_speed = 150;
+
+        // Calculate percentage filled (convert speed_str to float)
+        float current_speed = atof(speed_str);
+        float percentage = (current_speed / max_speed) * 100.0f;
+        if (percentage > 100.0f) percentage = 100.0f;  // Cap at 100%
+        if (percentage < 0.0f) percentage = 0.0f;      // Minimum 0%
+        
+        // Calculate filled width
+        uint16_t filled_width = (uint16_t)((percentage / 100.0f) * progress_bar_width);
+        
+        // Draw filled portion of progress bar in blue (or green/yellow/red based on speed)
+        uint16_t progress_color = blue_color;  // Default blue
+        if (percentage > 80.0f) {
+            progress_color = RGB565(255, 0, 0);  // Red for high speed
+        } else if (percentage > 60.0f) {
+            progress_color = RGB565(255, 165, 0);  // Orange for medium-high
+        } else {
+            progress_color = RGB565(0, 255, 0);  // Green for normal speed
+        }
+        
+        if (filled_width > 0) {
+            tft_draw_box(progress_bar_x_start, progress_bar_y, 
+                        progress_bar_x_start + filled_width - 1, 
+                        progress_bar_y + progress_bar_height - 1, progress_color);
+        }
+        tft_print_string(progress_bar_x_start, progress_bar_y + progress_bar_height + 10, "0", RGB565(0, 0, 0), RGB565(255, 255, 255));
+        tft_print_string(progress_bar_x_end - 50, progress_bar_y + progress_bar_height + 10, "150", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    }
 }
 
 // Display Location: [lat, lon] in a red box
 // Parameters: x, y = position of top-left corner of the label box, lat_str = latitude string, lon_str = longitude string
-void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lon_str) {
+void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir, bool all) {
     uint16_t line_height = (FONT_HEIGHT * FONT_SCALE) + 4;
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
@@ -383,20 +510,92 @@ void display_location(uint16_t x, uint16_t y, const char* lat_str, const char* l
     tft_print_string(x + 10, y + 8, "Location:", RGB565(255, 255, 255), red_color);
     
     // Print latitude below the box
-    tft_print_string(x + 10, y + label_box_height + 10, lat_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, "Lat: ", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 80, y + label_box_height + 10, lat_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 200, y + label_box_height + 10, lat_dir, RGB565(0, 0, 0), RGB565(255, 255, 255));
     
     // Print longitude below latitude
-    tft_print_string(x + 10, y + label_box_height + 10 + line_height, lon_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10 + line_height, "Lon: ", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 80, y + label_box_height + 10 + line_height, lon_str, RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 200, y + label_box_height + 10 + line_height, lon_dir, RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Print Compass Face
+        uint16_t compass_color = RGB565(150, 75, 0);
+        tft_draw_circle(120, 200, 80, compass_color);
+        tft_print_string(115, 130, "N", RGB565(0, 0, 0),compass_color);
+        tft_print_string(175, 195, "E", RGB565(0, 0, 0),compass_color);
+        tft_print_string(115, 260, "S", RGB565(0, 0, 0),compass_color);
+        tft_print_string(50, 195, "W", RGB565(0, 0, 0),compass_color);
+
+        // Print Direction Line
+        // Compass center is at (120, 200) with radius 80
+        int center_x = 120;
+        int center_y = 200;
+        int radius = 60;  // Line length from center
+        
+        int x_end = center_x;  // Initialize to center (fallback)
+        int y_end = center_y;  // Initialize to center (fallback)
+        
+        // Determine direction based on lat_dir and lon_dir strings
+        char lat_char = lat_dir[0];  // Get first character (N or S)
+        char lon_char = lon_dir[0];  // Get first character (E or W)
+        
+        if(lat_char == 'N' && lon_char == 'E'){
+            // North-East: x increases (east), y decreases (north)
+            x_end = center_x + radius - 10;
+            y_end = center_y - radius + 10;
+        }
+        else if(lat_char == 'N' && lon_char == 'W'){
+            // North-West: x decreases (west), y decreases (north)
+            x_end = center_x - radius + 10;
+            y_end = center_y - radius +10;
+        }
+        else if(lat_char == 'S' && lon_char == 'E'){
+            // South-East: x increases (east), y increases (south)
+            x_end = center_x + radius - 10;
+            y_end = center_y + radius - 10;
+        }
+        else if(lat_char == 'S' && lon_char == 'W'){
+            // South-West: x decreases (west), y increases (south)
+            x_end = center_x - radius + 10;
+            y_end = center_y + radius - 10;
+        }
+        else if(lat_char == 'N'){
+            // North only
+            x_end = center_x;
+            y_end = center_y - radius + 10;
+        }
+        else if(lat_char == 'S'){
+            // South only
+            x_end = center_x;
+            y_end = center_y + radius - 10;
+        }
+        else if(lon_char == 'E'){
+            // East only
+            x_end = center_x + radius - 10;
+            y_end = center_y;
+        }
+        else if(lon_char == 'W'){
+            // West only
+            x_end = center_x - radius + 10;
+            y_end = center_y;
+        }
+        
+        // Draw the direction line from center to calculated endpoint
+        tft_draw_thick_line(center_x, center_y, x_end, y_end, 6, red_color);
+    }
 }
 
 // Display Time: [time_string] in a green box
 // Parameters: x, y = position of top-left corner of the label box, time_str = time string to display
-void display_time(uint16_t x, uint16_t y, const char* time_str) {
+void display_time(uint16_t x, uint16_t y, const char* time_str, bool all) {
     uint16_t box_width = 220;
     uint16_t label_box_height = 30;
     uint16_t green_color = RGB565(0, 128, 0);
+
+    int center_x = 120;
+    int center_y = 200;
     
     // Draw green box for label
     tft_draw_box(x, y, x + box_width - 1, y + label_box_height - 1, green_color);
@@ -404,15 +603,95 @@ void display_time(uint16_t x, uint16_t y, const char* time_str) {
     // Print "Time:" label in the green box
     tft_print_string(x + 10, y + 8, "Time:", RGB565(255, 255, 255), green_color);
     
+    // Parse Time String (assumes format like "123456" or "12:34:56")
+    size_t num_substrings = 3;  // HH, MM, SS (not 5)
+    char** time_arr = (char**)malloc(num_substrings * sizeof(char*));
+    
+    // Allocate Memory for Parsed Times
+    for (size_t i = 0; i < num_substrings; ++i) {
+        time_arr[i] = (char*)malloc(3 * sizeof(char)); // 2 digits + null terminator
+        strncpy(time_arr[i], time_str + (i * 2), 2);
+        time_arr[i][2] = '\0'; // Null-terminate the substring
+    }
+
     // Print time string below the box
-    tft_print_string(x + 10, y + label_box_height + 10, time_str, 
-                     RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 10, y + label_box_height + 10, time_arr[0], RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 45, y + label_box_height + 10, ":", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 60, y + label_box_height + 10, time_arr[1], RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 95, y + label_box_height + 10,":", RGB565(0, 0, 0), RGB565(255, 255, 255));
+    tft_print_string(x + 110, y + label_box_height + 10, time_arr[2], RGB565(0, 0, 0), RGB565(255, 255, 255));
+
+    if(!all){
+        // Print Clock Face
+        tft_draw_circle(center_x, center_y, 100, green_color);
+        tft_print_string(105, 105, "12", RGB565(255, 255, 255), green_color);
+        tft_print_string(155, 120, "1", RGB565(255, 255, 255), green_color);
+        tft_print_string(185, 155, "2", RGB565(255, 255, 255), green_color);
+        tft_print_string(200, 192, "3", RGB565(255, 255, 255), green_color);
+        tft_print_string(185, 229, "4", RGB565(255, 255, 255), green_color);
+        tft_print_string(155, 264, "5", RGB565(255, 255, 255), green_color);
+        tft_print_string(110, 280, "6", RGB565(255, 255, 255), green_color);
+        tft_print_string(65, 264, "7", RGB565(255, 255, 255), green_color);
+        tft_print_string(35, 229, "8", RGB565(255, 255, 255), green_color);
+        tft_print_string(25, 192, "9", RGB565(255, 255, 255), green_color);
+        tft_print_string(35, 155, "10", RGB565(255, 255, 255), green_color);
+        tft_print_string(65, 120, "11", RGB565(255, 255, 255), green_color);
+        tft_draw_circle(center_x, center_y, 6, RGB565(255, 255, 255));
+
+        // Print Clock Hands
+        int time_hour = atoi(time_arr[0]);
+        int time_min = atoi(time_arr[1]);
+        int time_sec = atoi(time_arr[2]);
+        
+        // Calculate angles in radians (need to use float/double, not int)
+        // Hour hand: 12-hour format, position based on hour + minute fraction
+        float hour_angle = ((time_hour % 12) * 30.0f + time_min * 0.5f) * (PI / 180.0f) - (PI / 2.0f);
+        // Minute hand: position based on minutes
+        float min_angle = (time_min * 6.0f) * (PI / 180.0f) - (PI / 2.0f);
+        
+        // Calculate hand endpoints (hour hand shorter, minute hand longer)
+        int hour_radius = 50;  // Hour hand length
+        int min_radius = 70;   // Minute hand length
+        
+        int x_hour = center_x + hour_radius * cosf(hour_angle);
+        int y_hour = center_y + hour_radius * sinf(hour_angle);
+        int x_min = center_x + min_radius * cosf(min_angle);
+        int y_min = center_y + min_radius * sinf(min_angle);
+        
+        // Calculate second hand angle (seconds * 6 degrees per second)
+        float sec_angle = (time_sec * 6.0f) * (PI / 180.0f) - (PI / 2.0f);
+        
+        // Calculate second hand endpoint (longest hand)
+        int sec_radius = 85;  // Second hand length (longer than minute hand)
+        int x_sec = center_x + sec_radius * cosf(sec_angle);
+        int y_sec = center_y + sec_radius * sinf(sec_angle);
+
+        // Draw clock hands with different thicknesses
+        int hour_hand_width = 4;  // Thicker hour hand
+        int min_hand_width = 4;   // Thinner minute hand
+        int sec_hand_width = 3;   // Thinnest second hand
+        
+        // Draw second hand first (longest, goes on bottom layer)
+        tft_draw_thick_line(center_x, center_y, x_sec, y_sec, sec_hand_width, RGB565(225, 225, 255)); 
+        
+        // Draw minute hand second
+        tft_draw_thick_line(center_x, center_y, x_min, y_min, min_hand_width, RGB565(255, 255, 255));
+        
+        // Draw hour hand third (so it appears on top)
+        tft_draw_thick_line(center_x, center_y, x_hour, y_hour, hour_hand_width, RGB565(255, 255, 255));
+    }
+
+    // Free Memory of Parsed Times
+    for (size_t i = 0; i < num_substrings; ++i) {
+        free(time_arr[i]);
+    }
+    free(time_arr);
 }
 
-void display_all(const char* speed_str, const char* lat_str, const char* lon_str, const char* time_str){
-    display_speed(10, 10, speed_str);
-    display_location(10, 80, lat_str, lon_str);
-    display_time(10, 180, time_str);
+void display_all(const char* speed_str, const char* lat_str, const char* lat_dir, const char* lon_str, const char* lon_dir, const char* time_str){
+    display_speed(10, 10, speed_str, 1); // Assuming max_speed is 100.0f for this example
+    display_location(10, 100, lat_str, lat_dir, lon_str, lon_dir, 1);
+    display_time(10, 210, time_str, 1);
 }
 
 // Helper to get a label for the current page 
@@ -607,16 +886,16 @@ void gps_periodic_irq() {
 void disp_page(){
     switch (current_page) {
         case PAGE_SPEED:   
-            display_speed(10, 10, gps.ground_speed);
+            display_speed(10, 10, gps.ground_speed, 0);
             break;
         case PAGE_LOCATION:
-            display_location(10, 10, gps.latitude, gps.longitude);
+            display_location(10, 10, gps.latitude, gps.north_south, gps.longitude, gps.east_west, 0);
             break;
         case PAGE_TIME: 
-            display_time(10, 10, gps.time);   
+            display_time(10, 10, gps.time, 0);   
             break;
         default:   
-            display_all(gps.ground_speed, gps.latitude, gps.longitude, gps.time);    
+            display_all(gps.ground_speed, gps.latitude, gps.north_south, gps.longitude, gps.east_west, gps.time);    
             break;
     }
 }
